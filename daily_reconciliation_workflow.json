@@ -1,0 +1,439 @@
+{
+  "name": "Daily Bank Reconciliation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "minutesInterval": 1440
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "=https://your-xero-cfo-assistant-url.com/api/n8n/transactions/sync",
+        "options": {
+          "fullResponse": true
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$node[\"Set API Key\"].json[\"apiKey\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Sync Bank Transactions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "=https://your-xero-cfo-assistant-url.com/api/n8n/transactions/categorize",
+        "method": "POST",
+        "options": {
+          "fullResponse": true
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$node[\"Set API Key\"].json[\"apiKey\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Categorize Transactions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "apiKey",
+              "value": "YOUR_API_KEY_HERE"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set API Key",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$node[\"Sync Bank Transactions\"].json[\"success\"]}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "IF Sync Successful",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$node[\"Categorize Transactions\"].json[\"data\"][\"categorized\"]}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "IF Transactions Categorized",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "=https://your-xero-cfo-assistant-url.com/api/n8n/cash-flow/issues",
+        "options": {
+          "fullResponse": true
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$node[\"Set API Key\"].json[\"apiKey\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Check Cash Flow Issues",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$node[\"Check Cash Flow Issues\"].json[\"data\"][\"issues\"].length}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "IF Cash Flow Issues",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "=https://your-xero-cfo-assistant-url.com/api/n8n/anomalies",
+        "options": {
+          "fullResponse": true
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$node[\"Set API Key\"].json[\"apiKey\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Check Anomalies",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1850,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$node[\"Check Anomalies\"].json[\"data\"][\"anomalies\"].length}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "IF Anomalies Found",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2050,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://hooks.slack.com/services/YOUR_SLACK_WEBHOOK_URL",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "text",
+              "value": "=🚨 *Cash Flow Alert*: {{$node[\"Check Cash Flow Issues\"].json[\"data\"][\"issues\"][0][\"description\"]}}\n\nSeverity: {{$node[\"Check Cash Flow Issues\"].json[\"data\"][\"issues\"][0][\"severity\"]}}\n\nRecommendations:\n{{$node[\"Check Cash Flow Issues\"].json[\"data\"][\"issues\"][0][\"recommendations\"].join(\"\\n\")}}"
+            }
+          ]
+        }
+      },
+      "name": "Send Cash Flow Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1850,
+        50
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://hooks.slack.com/services/YOUR_SLACK_WEBHOOK_URL",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "text",
+              "value": "=⚠️ *Financial Anomaly Detected*: {{$node[\"Check Anomalies\"].json[\"data\"][\"anomalies\"][0][\"description\"]}}\n\nSeverity: {{$node[\"Check Anomalies\"].json[\"data\"][\"anomalies\"][0][\"severity\"]}}\n\nDate: {{$node[\"Check Anomalies\"].json[\"data\"][\"anomalies\"][0][\"date\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Send Anomaly Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        2250,
+        50
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://hooks.slack.com/services/YOUR_SLACK_WEBHOOK_URL",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "text",
+              "value": "=✅ *Daily Reconciliation Complete*\n\nTransactions synced: {{$node[\"Sync Bank Transactions\"].json[\"data\"][\"count\"]}}\nTransactions categorized: {{$node[\"Categorize Transactions\"].json[\"data\"][\"categorized\"]}}/{{$node[\"Categorize Transactions\"].json[\"data\"][\"total\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Send Success Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        2250,
+        350
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set API Key",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Bank Transactions": {
+      "main": [
+        [
+          {
+            "node": "IF Sync Successful",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Categorize Transactions": {
+      "main": [
+        [
+          {
+            "node": "IF Transactions Categorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set API Key": {
+      "main": [
+        [
+          {
+            "node": "Sync Bank Transactions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Sync Successful": {
+      "main": [
+        [
+          {
+            "node": "Categorize Transactions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Transactions Categorized": {
+      "main": [
+        [
+          {
+            "node": "Check Cash Flow Issues",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Cash Flow Issues": {
+      "main": [
+        [
+          {
+            "node": "IF Cash Flow Issues",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Cash Flow Issues": {
+      "main": [
+        [
+          {
+            "node": "Send Cash Flow Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Anomalies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Anomalies": {
+      "main": [
+        [
+          {
+            "node": "IF Anomalies Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Anomalies Found": {
+      "main": [
+        [
+          {
+            "node": "Send Anomaly Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

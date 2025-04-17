@@ -1,0 +1,236 @@
+{
+  "name": "Monthly Financial Report",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "months",
+              "minutesInterval": 43200
+            }
+          ]
+        }
+      },
+      "name": "Monthly Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "apiKey",
+              "value": "YOUR_API_KEY_HERE"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set API Key",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "=https://your-xero-cfo-assistant-url.com/api/n8n/kpis?months=3",
+        "options": {
+          "fullResponse": true
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$node[\"Set API Key\"].json[\"apiKey\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Get Financial KPIs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "=https://your-xero-cfo-assistant-url.com/api/n8n/cash-flow/forecast?days=90",
+        "options": {
+          "fullResponse": true
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$node[\"Set API Key\"].json[\"apiKey\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Get Cash Flow Forecast",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "=https://your-xero-cfo-assistant-url.com/api/n8n/anomalies?months=1",
+        "options": {
+          "fullResponse": true
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$node[\"Set API Key\"].json[\"apiKey\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Get Anomalies",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Get current month name\nconst date = new Date();\nconst monthNames = [\"January\", \"February\", \"March\", \"April\", \"May\", \"June\", \"July\", \"August\", \"September\", \"October\", \"November\", \"December\"];\nconst currentMonth = monthNames[date.getMonth()];\nconst currentYear = date.getFullYear();\n\n// Get KPI data\nconst kpis = $node[\"Get Financial KPIs\"].json.data;\n\n// Get cash flow data\nconst cashFlow = $node[\"Get Cash Flow Forecast\"].json.data;\n\n// Get anomalies\nconst anomalies = $node[\"Get Anomalies\"].json.data.anomalies;\n\n// Format KPI section\nlet kpiSection = `## Key Financial Indicators\\n\\n`;\nkpiSection += `| Metric | Current | Previous | Change |\\n`;\nkpiSection += `|--------|---------|----------|--------|\\n`;\n\nif (kpis.profitability) {\n  kpiSection += `| Gross Profit Margin | ${(kpis.profitability.grossProfitMargin.current * 100).toFixed(1)}% | ${(kpis.profitability.grossProfitMargin.previous * 100).toFixed(1)}% | ${kpis.profitability.grossProfitMargin.change > 0 ? '↑' : '↓'} ${Math.abs(kpis.profitability.grossProfitMargin.change * 100).toFixed(1)}% |\\n`;\n  kpiSection += `| Net Profit Margin | ${(kpis.profitability.netProfitMargin.current * 100).toFixed(1)}% | ${(kpis.profitability.netProfitMargin.previous * 100).toFixed(1)}% | ${kpis.profitability.netProfitMargin.change > 0 ? '↑' : '↓'} ${Math.abs(kpis.profitability.netProfitMargin.change * 100).toFixed(1)}% |\\n`;\n}\n\nif (kpis.liquidity) {\n  kpiSection += `| Current Ratio | ${kpis.liquidity.currentRatio.current.toFixed(2)} | ${kpis.liquidity.currentRatio.previous.toFixed(2)} | ${kpis.liquidity.currentRatio.change > 0 ? '↑' : '↓'} ${Math.abs(kpis.liquidity.currentRatio.change).toFixed(2)} |\\n`;\n  kpiSection += `| Quick Ratio | ${kpis.liquidity.quickRatio.current.toFixed(2)} | ${kpis.liquidity.quickRatio.previous.toFixed(2)} | ${kpis.liquidity.quickRatio.change > 0 ? '↑' : '↓'} ${Math.abs(kpis.liquidity.quickRatio.change).toFixed(2)} |\\n`;\n}\n\nif (kpis.efficiency) {\n  kpiSection += `| Accounts Receivable Days | ${kpis.efficiency.daysReceivablesOutstanding.current.toFixed(1)} | ${kpis.efficiency.daysReceivablesOutstanding.previous.toFixed(1)} | ${kpis.efficiency.daysReceivablesOutstanding.change < 0 ? '↑' : '↓'} ${Math.abs(kpis.efficiency.daysReceivablesOutstanding.change).toFixed(1)} |\\n`;\n  kpiSection += `| Accounts Payable Days | ${kpis.efficiency.daysPayablesOutstanding.current.toFixed(1)} | ${kpis.efficiency.daysPayablesOutstanding.previous.toFixed(1)} | ${kpis.efficiency.daysPayablesOutstanding.change > 0 ? '↑' : '↓'} ${Math.abs(kpis.efficiency.daysPayablesOutstanding.change).toFixed(1)} |\\n`;\n}\n\n// Format cash flow section\nlet cashFlowSection = `## Cash Flow Forecast\\n\\n`;\ncashFlowSection += `Starting Balance: $${cashFlow.startingBalance.toFixed(2)}\\n\\n`;\ncashFlowSection += `Projected Net Cash Flow (90 days): $${cashFlow.netCashFlow.toFixed(2)}\\n\\n`;\ncashFlowSection += `### Monthly Projections\\n\\n`;\ncashFlowSection += `| Month | Inflows | Outflows | Net Cash Flow | Ending Balance |\\n`;\ncashFlowSection += `|-------|---------|----------|--------------|----------------|\\n`;\n\nfor (const month of cashFlow.monthlyForecasts) {\n  cashFlowSection += `| ${month.month}/${month.year} | $${month.totalInflow.toFixed(2)} | $${month.totalOutflow.toFixed(2)} | $${month.netCashFlow.toFixed(2)} | $${month.endingBalance.toFixed(2)} |\\n`;\n}\n\n// Format anomalies section\nlet anomaliesSection = '';\nif (anomalies && anomalies.length > 0) {\n  anomaliesSection = `## Financial Anomalies\\n\\n`;\n  \n  for (const anomaly of anomalies) {\n    anomaliesSection += `### ${anomaly.type.replace(/_/g, ' ')}\\n\\n`;\n    anomaliesSection += `**Severity**: ${anomaly.severity}\\n\\n`;\n    anomaliesSection += `**Description**: ${anomaly.description}\\n\\n`;\n    \n    if (anomaly.date) {\n      anomaliesSection += `**Date**: ${anomaly.date}\\n\\n`;\n    } else if (anomaly.period) {\n      anomaliesSection += `**Period**: ${anomaly.period.fromDate} to ${anomaly.period.toDate}\\n\\n`;\n    }\n  }\n} else {\n  anomaliesSection = `## Financial Anomalies\\n\\nNo significant anomalies detected in the past month.\\n\\n`;\n}\n\n// Format recommendations\nlet recommendationsSection = `## Recommendations\\n\\n`;\n\nif (kpis.healthScore < 70) {\n  recommendationsSection += `- **Improve Financial Health**: Your overall financial health score is ${kpis.healthScore}/100. Focus on improving liquidity and profitability.\\n`;\n}\n\nif (kpis.efficiency && kpis.efficiency.daysReceivablesOutstanding.current > 45) {\n  recommendationsSection += `- **Accelerate Collections**: Your accounts receivable days (${kpis.efficiency.daysReceivablesOutstanding.current.toFixed(1)}) are high. Consider implementing stricter payment terms or offering early payment discounts.\\n`;\n}\n\nif (cashFlow.lowestBalance < 5000) {\n  recommendationsSection += `- **Monitor Cash Flow**: Your projected lowest cash balance is $${cashFlow.lowestBalance.toFixed(2)} on ${cashFlow.lowestBalanceDate}. Consider delaying non-essential expenses or accelerating collections.\\n`;\n}\n\nif (anomalies && anomalies.length > 0) {\n  recommendationsSection += `- **Address Anomalies**: Review and address the ${anomalies.length} financial anomalies detected this month.\\n`;\n}\n\n// Combine all sections\nconst reportTitle = `# Monthly Financial Report: ${currentMonth} ${currentYear}\\n\\n`;\nconst executiveSummary = `## Executive Summary\\n\\nFinancial Health Score: ${kpis.healthScore}/100 (${kpis.healthScore >= 80 ? 'Excellent' : kpis.healthScore >= 70 ? 'Good' : kpis.healthScore >= 60 ? 'Fair' : 'Needs Improvement'})\\n\\nGross Profit Margin: ${(kpis.profitability.grossProfitMargin.current * 100).toFixed(1)}%\\n\\nCurrent Ratio: ${kpis.liquidity.currentRatio.current.toFixed(2)}\\n\\nProjected Cash Position (90 days): $${(cashFlow.startingBalance + cashFlow.netCashFlow).toFixed(2)}\\n\\n`;\n\nconst fullReport = reportTitle + executiveSummary + kpiSection + '\\n\\n' + cashFlowSection + '\\n\\n' + anomaliesSection + '\\n\\n' + recommendationsSection;\n\nreturn { report: fullReport };"
+      },
+      "name": "Generate Report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://hooks.slack.com/services/YOUR_SLACK_WEBHOOK_URL",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "text",
+              "value": "=📊 *Monthly Financial Report Generated*\n\nThe monthly financial report has been generated. Here's a summary:\n\n• Financial Health Score: {{$node[\"Get Financial KPIs\"].json[\"data\"][\"healthScore\"]}}/100\n• Gross Profit Margin: {{($node[\"Get Financial KPIs\"].json[\"data\"][\"profitability\"][\"grossProfitMargin\"][\"current\"] * 100).toFixed(1)}}%\n• Projected Cash Position (90 days): ${{($node[\"Get Cash Flow Forecast\"].json[\"data\"][\"startingBalance\"] + $node[\"Get Cash Flow Forecast\"].json[\"data\"][\"netCashFlow\"]).toFixed(2)}}\n• Anomalies Detected: {{$node[\"Get Anomalies\"].json[\"data\"][\"anomalies\"].length}}\n\nFull report is attached."
+            },
+            {
+              "name": "attachments",
+              "value": "=[{\"title\": \"Monthly Financial Report\", \"text\": {{$node[\"Generate Report\"].json[\"report\"]}}, \"mrkdwn_in\": [\"text\"]}]"
+            }
+          ]
+        }
+      },
+      "name": "Send Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Monthly Schedule": {
+      "main": [
+        [
+          {
+            "node": "Set API Key",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set API Key": {
+      "main": [
+        [
+          {
+            "node": "Get Financial KPIs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Cash Flow Forecast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Financial KPIs": {
+      "main": [
+        [
+          {
+            "node": "Get Anomalies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Cash Flow Forecast": {
+      "main": [
+        [
+          {
+            "node": "Get Anomalies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Anomalies": {
+      "main": [
+        [
+          {
+            "node": "Generate Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Report": {
+      "main": [
+        [
+          {
+            "node": "Send Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

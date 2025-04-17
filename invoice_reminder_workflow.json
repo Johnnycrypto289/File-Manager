@@ -1,0 +1,357 @@
+{
+  "name": "Invoice Payment Reminder",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "minutesInterval": 1440
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "apiKey",
+              "value": "YOUR_API_KEY_HERE"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set API Key",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "=https://your-xero-cfo-assistant-url.com/api/n8n/invoices/overdue",
+        "options": {
+          "fullResponse": true
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$node[\"Set API Key\"].json[\"apiKey\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Get Overdue Invoices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$node[\"Get Overdue Invoices\"].json[\"data\"][\"total\"]}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "IF Overdue Invoices Exist",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "splitInBatches",
+        "sourceData": "={{$node[\"Get Overdue Invoices\"].json[\"data\"][\"byContact\"]}}",
+        "options": {}
+      },
+      "name": "Split By Contact",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "=https://your-xero-cfo-assistant-url.com/api/n8n/contacts/{{$node[\"Split By Contact\"].json[\"contact\"][\"contactID\"]}}/payment-reminder",
+        "options": {
+          "fullResponse": true
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$node[\"Set API Key\"].json[\"apiKey\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Generate Payment Reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "=https://your-xero-cfo-assistant-url.com/api/n8n/contacts/{{$node[\"Split By Contact\"].json[\"contact\"][\"contactID\"]}}/payment-reminder",
+        "method": "POST",
+        "options": {
+          "fullResponse": true
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$node[\"Set API Key\"].json[\"apiKey\"]}}"
+            }
+          ]
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "emailAddress",
+              "value": "={{$node[\"Generate Payment Reminder\"].json[\"data\"][\"emailAddress\"]}}"
+            },
+            {
+              "name": "subject",
+              "value": "={{$node[\"Generate Payment Reminder\"].json[\"data\"][\"subject\"]}}"
+            },
+            {
+              "name": "message",
+              "value": "={{$node[\"Generate Payment Reminder\"].json[\"data\"][\"message\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Send Payment Reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://hooks.slack.com/services/YOUR_SLACK_WEBHOOK_URL",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "text",
+              "value": "=📧 *Payment Reminder Sent*\n\nContact: {{$node[\"Generate Payment Reminder\"].json[\"data\"][\"contact\"][\"name\"]}}\nEmail: {{$node[\"Generate Payment Reminder\"].json[\"data\"][\"emailAddress\"]}}\nOverdue Invoices: {{$node[\"Generate Payment Reminder\"].json[\"data\"][\"overdueInvoices\"].length}}\nTotal Amount: ${{$node[\"Generate Payment Reminder\"].json[\"data\"][\"totalAmount\"].toFixed(2)}}\nDays Past Due: {{$node[\"Generate Payment Reminder\"].json[\"data\"][\"daysPastDue\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://hooks.slack.com/services/YOUR_SLACK_WEBHOOK_URL",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "text",
+              "value": "=✅ *Invoice Payment Reminder Summary*\n\nTotal overdue invoices: {{$node[\"Get Overdue Invoices\"].json[\"data\"][\"total\"]}}\nTotal amount overdue: ${{$node[\"Get Overdue Invoices\"].json[\"data\"][\"totalAmount\"].toFixed(2)}}\nContacts with overdue invoices: {{$node[\"Get Overdue Invoices\"].json[\"data\"][\"byContact\"].length}}"
+            }
+          ]
+        }
+      },
+      "name": "Send Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1850,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://hooks.slack.com/services/YOUR_SLACK_WEBHOOK_URL",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "text",
+              "value": "=✅ *Invoice Payment Reminder Check*\n\nNo overdue invoices found."
+            }
+          ]
+        }
+      },
+      "name": "Send No Overdue Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set API Key",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set API Key": {
+      "main": [
+        [
+          {
+            "node": "Get Overdue Invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Overdue Invoices": {
+      "main": [
+        [
+          {
+            "node": "IF Overdue Invoices Exist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Overdue Invoices Exist": {
+      "main": [
+        [
+          {
+            "node": "Split By Contact",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send No Overdue Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split By Contact": {
+      "main": [
+        [
+          {
+            "node": "Generate Payment Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Payment Reminder": {
+      "main": [
+        [
+          {
+            "node": "Send Payment Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Payment Reminder": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
